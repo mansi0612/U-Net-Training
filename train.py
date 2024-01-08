@@ -1,9 +1,11 @@
 # USAGE
 # python train.py
 # import the necessary packages
+import numpy as np
 from pyimagesearch.dataset import SegmentationDataset
 from pyimagesearch.model import UNet
 from pyimagesearch import config
+from PIL import Image
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -15,34 +17,77 @@ import matplotlib.pyplot as plt
 import torch
 import time
 import os
+import glob
+
+class CustomTransform:
+     def __init__(self, transforms):
+        self.transforms = transforms
+
+     def __call__(self, image, mask):
+        image = (image * 255).astype(np.uint8)
+
+        # Convert NumPy arrays to PIL Images
+        image_pil = Image.fromarray(image)
+        mask_pil = Image.fromarray(mask)
+
+        # Apply each transform to image and mask
+        for transform in self.transforms.transforms:
+            image_pil = transform(image_pil)
+            mask_pil = transform(mask_pil)
+
+        # Convert PIL Images back to float32
+        image = np.array(image_pil) / 255.0
+        mask = np.array(mask_pil)
+
+        return image, mask
 
 # load the image and mask filepaths in a sorted manner
-imagePaths = sorted(list(paths.list_images(config.IMAGE_DATASET_PATH)))
-maskPaths = sorted(list(paths.list_images(config.MASK_DATASET_PATH)))
+imagePaths = glob.glob("/workspaces/U-Net-Training/dataset/train/images/*.tif")
+maskPaths = glob.glob("/workspaces/U-Net-Training/dataset/train/mask/*.tif")
 # partition the data into training and testing splits using 85% of
 # the data for training and the remaining 15% for testing
-split = train_test_split(imagePaths, maskPaths,
-	test_size=config.TEST_SPLIT, random_state=42)
-# unpack the data split
-(trainImages, testImages) = split[:2]
-(trainMasks, testMasks) = split[2:]
+# Check if the paths are not empty
+if not imagePaths or not maskPaths:
+    raise ValueError("No image or mask files found.")
+
+# Split the dataset
+from sklearn.model_selection import train_test_split
+
+# Split the dataset only if there are samples
+if imagePaths and maskPaths:
+    imagePaths_train, imagePaths_val, maskPaths_train, maskPaths_val = train_test_split(
+        imagePaths, maskPaths, test_size=config.TEST_SPLIT, random_state=42
+    )
+else:
+    raise ValueError("No samples available for train-test split.")
+
+# split = train_test_split(imagePaths, maskPaths,
+# 	test_size=config.TEST_SPLIT, random_state=42)
+# # unpack the data split
+# (trainImages, testImages) = split[:2]
+# (trainMasks, testMasks) = split[2:]
+
+
 # write the testing image paths to disk so that we can use then
 # when evaluating/testing our model
 print("[INFO] saving testing image paths...")
-f = open(config.TEST_PATHS, "w")
-f.write("\n".join(testImages))
-f.close()
+with open(config.TEST_PATHS, "w") as f:
+    f.write("\n".join(imagePaths_val))
 
 # define transformations
-transforms = transforms.Compose([transforms.ToPILImage(),
- 	transforms.Resize((config.INPUT_IMAGE_HEIGHT,
-		config.INPUT_IMAGE_WIDTH)),
-	transforms.ToTensor()])
-# create the train and test datasets
-trainDS = SegmentationDataset(imagePaths=trainImages, maskPaths=trainMasks,
-	transforms=transforms)
-testDS = SegmentationDataset(imagePaths=testImages, maskPaths=testMasks,
-    transforms=transforms)
+custom_transforms = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((config.INPUT_IMAGE_HEIGHT, config.INPUT_IMAGE_WIDTH)),
+    transforms.ToTensor()
+])
+trainDS = SegmentationDataset(imagePaths=imagePaths_train, maskPaths=maskPaths_train, transforms=custom_transforms)
+testDS = SegmentationDataset(imagePaths=imagePaths_val, maskPaths=maskPaths_val, transforms=custom_transforms)
+
+
+# # create the train and test datasets
+# trainDS = SegmentationDataset(imagePaths=imagePaths_train, maskPaths=maskPaths_train, transforms=transforms)
+# testDS = SegmentationDataset(imagePaths=imagePaths_val, maskPaths=maskPaths_val, transforms=transforms)
+
 print(f"[INFO] found {len(trainDS)} examples in the training set...")
 print(f"[INFO] found {len(testDS)} examples in the test set...")
 # create the training and test data loaders

@@ -14,7 +14,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 PIN_MEMORY = True if DEVICE == "cuda" else False
 # define the number of channels in the input, number of classes,
 # and number of levels in the U-Net model
-NUM_CHANNELS = 1
+NUM_CHANNELS = 3
 NUM_CLASSES = 1
 NUM_LEVELS = 3
 # initialize learning rate, number of epochs to train for, and the
